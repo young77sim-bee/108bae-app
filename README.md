@@ -19,13 +19,14 @@
 ## 빌드 방법
 
     npm install
-    node make_icons.js              # 아이콘/스플래시 PNG 생성 (sharp 필요)
-    npx cap add android             # 네이티브 프로젝트 생성
-    npx cap sync
+    npx cap sync                    # 웹 자산 + 플러그인 동기화 (android/ 폴더는 저장소에 포함됨)
     cd android
     ./gradlew assembleDebug         # Windows: gradlew.bat assembleDebug
 
 빌드 결과물: `android/app/build/outputs/apk/debug/app-debug.apk`
+
+아이콘/스플래시를 바꾸려면 `assets/`의 PNG를 수정하거나 `node make_icons.js`(sharp 필요)로 재생성한 뒤
+`npx @capacitor/assets generate` 를 실행합니다.
 
 > 처음 빌드 시 Android SDK Platform 34 / Build-Tools 34.0.0 이 필요하며,
 > `sdkmanager --licenses` 로 라이선스 동의가 되어 있어야 합니다.
