@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>108배 절 카운터</title>
+<style>
+  :root {
+    --bg: #1a1410;
+    --bg2: #241b14;
+    --accent: #d8a657;
+    --accent2: #e8c07d;
+    --text: #f0e6d6;
+    --muted: #9b8b76;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Malgun Gothic", "맑은 고딕", system-ui, sans-serif;
+    background: radial-gradient(circle at 50% 30%, var(--bg2), var(--bg));
+    color: var(--text);
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  h1 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+  }
+  .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 28px; }
+
+  .count-num {
+    font-size: clamp(5rem, 28vw, 14rem);
+    font-weight: 800;
+    line-height: 1;
+    color: var(--accent2);
+    text-shadow: 0 0 40px rgba(216,166,87,0.35);
+    transition: transform 0.15s ease;
+  }
+  .count-num.pulse { transform: scale(1.12); }
+  .count-kor {
+    font-size: clamp(1.6rem, 7vw, 3rem);
+    color: var(--text);
+    margin-top: 4px;
+    min-height: 1.2em;
+  }
+  .prayer-line {
+    color: var(--accent);
+    font-size: clamp(1rem, 4.5vw, 1.5rem);
+    margin-top: 6px;
+    min-height: 1.3em;
+    opacity: 0.92;
+    font-weight: 600;
+  }
+  .count-num.cd {
+    color: var(--muted);
+    text-shadow: none;
+  }
+  .of { color: var(--muted); font-size: 1.1rem; margin-top: 12px; }
+
+  .bar {
+    width: min(90vw, 480px);
+    height: 8px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 99px;
+    overflow: hidden;
+    margin: 22px 0 6px;
+  }
+  .bar > div {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 99px;
+    transition: width 0.4s ease;
+  }
+  .timer { color: var(--muted); font-size: 0.85rem; letter-spacing: 0.05em; }
+
+  .controls {
+    display: flex;
+    gap: 12px;
+    margin-top: 30px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  button {
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--bg);
+    background: var(--accent);
+    border: none;
+    border-radius: 99px;
+    padding: 14px 30px;
+    cursor: pointer;
+    transition: filter 0.15s, transform 0.1s, opacity 0.15s;
+  }
+  button:hover { filter: brightness(1.08); }
+  button:active { transform: scale(0.96); }
+  button.ghost {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+  button:disabled { opacity: 0.35; cursor: default; }
+
+  .settings {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    margin-top: 26px;
+    color: var(--muted);
+    font-size: 0.85rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .settings label { display: flex; align-items: center; gap: 8px; }
+  .settings input[type="number"] {
+    width: 64px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    text-align: center;
+  }
+  .settings select {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-family: inherit;
+    font-size: 0.9rem;
+  }
+  .done-msg {
+    color: var(--accent2);
+    font-size: 1.1rem;
+    margin-top: 18px;
+    min-height: 1.4em;
+    font-weight: 600;
+  }
+  .hint { color: var(--muted); font-size: 0.75rem; margin-top: 24px; opacity: 0.7; }
+</style>
+</head>
+<body>
+  <h1>108배 절 카운터</h1>
+  <div class="sub">15초 간격 · 한글 음성 카운팅</div>
+
+  <div class="count-num" id="num">0</div>
+  <div class="count-kor" id="kor">준비</div>
+  <div class="prayer-line" id="prayerLine"></div>
+  <div class="of"><span id="cur">0</span> / 108</div>
+
+  <div class="bar"><div id="prog"></div></div>
+  <div class="timer">경과 <span id="elapsed">00:00</span> · 남음 <span id="remain">27:00</span></div>
+
+  <div class="done-msg" id="doneMsg"></div>
+
+  <div class="controls">
+    <button id="startBtn">시작</button>
+    <button id="pauseBtn" class="ghost" disabled>일시정지</button>
+    <button id="resetBtn" class="ghost" disabled>다시시작</button>
+  </div>
+
+  <div class="settings">
+    <label>기도문구
+      <input type="text" id="prayer" placeholder="예) 관세음보살" maxlength="40" style="width:160px;text-align:left;">
+    </label>
+    <label>반복
+      <input type="number" id="repeat" value="1" min="1" max="12" step="1"> 회
+    </label>
+    <label>간격
+      <input type="number" id="interval" value="15" min="1" max="120" step="1"> 초
+    </label>
+    <label>읽기
+      <select id="readMode">
+        <option value="sino">숫자(일·이·삼)</option>
+        <option value="bae">N배(일배·이배)</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="voiceOn" checked> 음성</label>
+    <label><input type="checkbox" id="bellOn" checked> 종소리</label>
+    <label>종 높이
+      <input type="range" id="bellPitch" min="120" max="700" value="294" step="6" style="width:100px;vertical-align:middle;">
+      <span id="bellPitchVal">294</span>Hz
+    </label>
+    <label>종 음량
+      <input type="range" id="bellVol" min="0" max="100" value="50" step="5" style="width:100px;vertical-align:middle;">
+      <span id="bellVolVal">50</span>%
+    </label>
+  </div>
+
+  <div class="hint">화면 자동 꺼짐 방지 작동 중 · 음성이 안 나오면 한 번 더 [시작]을 눌러주세요</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var TOTAL = 108;
+
+  var numEl = document.getElementById('num');
+  var korEl = document.getElementById('kor');
+  var prayerLineEl = document.getElementById('prayerLine');
+  var prayerEl = document.getElementById('prayer');
+  var repeatEl = document.getElementById('repeat');
+  var curEl = document.getElementById('cur');
+  var progEl = document.getElementById('prog');
+  var elapsedEl = document.getElementById('elapsed');
+  var remainEl = document.getElementById('remain');
+  var doneMsgEl = document.getElementById('doneMsg');
+  var startBtn = document.getElementById('startBtn');
+  var pauseBtn = document.getElementById('pauseBtn');
+  var resetBtn = document.getElementById('resetBtn');
+  var intervalEl = document.getElementById('interval');
+  var readModeEl = document.getElementById('readMode');
+  var voiceOnEl = document.getElementById('voiceOn');
+  var bellOnEl = document.getElementById('bellOn');
+  var bellPitchEl = document.getElementById('bellPitch');
+  var bellVolEl = document.getElementById('bellVol');
+  var bellPitchValEl = document.getElementById('bellPitchVal');
+  var bellVolValEl = document.getElementById('bellVolVal');
+
+  var count = 0;
+  var running = false;
+  var timer = null;
+  var tickTimer = null;
+  var stepMs = 15000;
+  var nextAt = 0;
+  var wakeLock = null;
+
+  // 1~108 → 한자식 한글 (일, 이, …, 백, 백일, …, 백팔)
+  function sinoKor(n) {
+    if (n <= 0) return '';
+    var d = ['', '일', '이', '삼', '사', '오', '육', '칠', '팔', '구'];
+    var s = '';
+    var h = Math.floor(n / 100);
+    var t = Math.floor((n % 100) / 10);
+    var u = n % 10;
+    if (h) s += (h === 1 ? '' : d[h]) + '백';
+    if (t) s += (t === 1 ? '' : d[t]) + '십';
+    if (u) s += d[u];
+    return s;
+  }
+
+  function korFor(n) {
+    var base = sinoKor(n);
+    return readModeEl.value === 'bae' ? base + '배' : base;
+  }
+
+  // 1~108 → 영어 (one, two, …, one hundred eight)
+  function enWords(n) {
+    if (n <= 0) return '';
+    var ones = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+                'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+    var tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+    var s = '';
+    var h = Math.floor(n / 100);
+    var r = n % 100;
+    if (h) s += ones[h] + ' hundred';
+    if (r) {
+      if (s) s += ' ';
+      if (r < 20) s += ones[r];
+      else { s += tens[Math.floor(r / 10)]; if (r % 10) s += '-' + ones[r % 10]; }
+    }
+    return s;
+  }
+
+  function enFor(n) {
+    var base = enWords(n);
+    return readModeEl.value === 'bae' ? base + (n === 1 ? ' bow' : ' bows') : base;
+  }
+
+  function prayerText() {
+    return (prayerEl.value || '').trim();
+  }
+
+  // 한 절(간격) 동안: 종소리 직후 숫자 1회 + 기도 문구 느리게 3회 분산
+  function chantForCount(n) {
+    // 숫자 (종소리 직후) — 영어 음성
+    setTimeout(function () { if (running) speakEn(enFor(n), 0.95); }, 350);
+
+    var p = prayerText();
+    if (!p) return;
+
+    var slots = Math.max(1, Math.min(12, parseInt(repeatEl.value, 10) || 1));  // 절 1회당 기도 문구 반복 횟수
+    var startOffset = 1700;        // 숫자 발화가 끝난 뒤 시작
+    var endMargin = 2500;          // 다음 종소리 전 여유
+    var span = Math.max(0, stepMs - startOffset - endMargin);
+    for (var i = 0; i < slots; i++) {
+      var t = startOffset + (slots > 1 ? (span * i / (slots - 1)) : 0);
+      (function (delay) {
+        setTimeout(function () { if (running) speakKo(p, 0.65); }, delay);  // 기도 문구는 한국어 음성, 느리게
+      })(t);
+    }
+  }
+
+  function fmt(sec) {
+    sec = Math.max(0, Math.round(sec));
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  var audioCtx = null;
+  function ensureAudio() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (e) {}
+  }
+
+  // Web Audio 합성 종소리 (외부 파일 없음)
+  function playBell(strong) {
+    if (!bellOnEl.checked) return;
+    ensureAudio();
+    if (!audioCtx) return;
+    var now = audioCtx.currentTime;
+
+    var vol = (parseInt(bellVolEl.value, 10) || 0) / 100;   // 0 ~ 1
+    if (vol <= 0) return;
+    var master = audioCtx.createGain();
+    master.gain.value = strong ? Math.min(1, vol * 1.25) : vol;
+    master.connect(audioCtx.destination);
+
+    // 잔상(여운) — 깨끗한 반향. 피드백을 낮춰 맑게 유지
+    var delay = audioCtx.createDelay(2.0);
+    delay.delayTime.value = 0.18;
+    var fb = audioCtx.createGain();
+    fb.gain.value = 0.33;
+    var wet = audioCtx.createGain();
+    wet.gain.value = 0.32;
+    master.connect(delay);
+    delay.connect(fb);
+    fb.connect(delay);
+    delay.connect(wet);
+    wet.connect(audioCtx.destination);
+
+    // 맑은 종 음색: 순수 사인 배음 + 밝은 고배음, 긴 감쇠
+    var f0 = parseFloat(bellPitchEl.value) || 294;  // 슬라이더로 조절
+    var partials = [
+      { f: f0 * 0.5,  g: 0.45, d: 12.0 },  // 저음 허밍(가장 길게)
+      { f: f0 * 1.0,  g: 1.00, d: 13.0 },  // 기음
+      { f: f0 * 2.0,  g: 0.55, d: 9.0 },   // 옥타브 — 맑은 배음
+      { f: f0 * 2.76, g: 0.28, d: 5.5 },   // 종 특유 배음
+      { f: f0 * 4.0,  g: 0.20, d: 3.2 },   // 밝은 고배음
+      { f: f0 * 5.4,  g: 0.10, d: 1.6 }    // 타격 순간 반짝임
+    ];
+    partials.forEach(function (p) {
+      var osc = audioCtx.createOscillator();
+      var g = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = p.f;
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(p.g, now + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + p.d);
+      osc.connect(g);
+      g.connect(master);
+      osc.start(now);
+      osc.stop(now + p.d + 0.05);
+    });
+
+    // 긴 여운까지 끝난 뒤 노드 정리(누적 방지)
+    setTimeout(function () {
+      try { master.disconnect(); delay.disconnect(); fb.disconnect(); wet.disconnect(); } catch (e) {}
+    }, 15000);
+  }
+
+  // 네이티브(앱) 음성: Capacitor TextToSpeech 사용 — WebView 브라우저 TTS 불안정 대비
+  var CapTTS = (window.Capacitor && window.Capacitor.isNativePlatform &&
+                window.Capacitor.isNativePlatform() && window.Capacitor.Plugins)
+               ? window.Capacitor.Plugins.TextToSpeech : null;
+  function nativeSay(text, lang, rate, pitch) {
+    if (!CapTTS) return false;
+    try { CapTTS.stop(); } catch (e) {}
+    try {
+      CapTTS.speak({
+        text: text, lang: lang, rate: rate, pitch: pitch || 1.0,
+        volume: 1.0, category: 'playback'
+      }).catch(function () {});
+    } catch (e) {}
+    return true;
+  }
+
+  // 부드러운 한국어 여성 음성 — 기도 문구에 사용
+  var koVoice = null;
+  function pickVoice() {
+    if (!('speechSynthesis' in window)) return;
+    var voices = window.speechSynthesis.getVoices() || [];
+    var ko = voices.filter(function (v) { return /^ko/i.test(v.lang); });
+    if (!ko.length) { koVoice = null; return; }
+    var female = ['heami', 'sunhi', 'yuna', 'nara', 'seoyeon', 'jimin', 'female', '여성'];
+    var male = ['injoon', 'minsang', 'male', '남성'];
+    var pick = ko.find(function (v) {
+      var n = v.name.toLowerCase();
+      return female.some(function (h) { return n.indexOf(h) >= 0; });
+    });
+    if (!pick) {
+      pick = ko.find(function (v) {
+        var n = v.name.toLowerCase();
+        return !male.some(function (h) { return n.indexOf(h) >= 0; });
+      });
+    }
+    koVoice = pick || ko[0];
+  }
+
+  function speakKo(text, rate) {
+    if (!voiceOnEl.checked) return;
+    if (nativeSay(text, 'ko-KR', (typeof rate === 'number') ? rate : 0.95, 1.0)) return;
+    if (!('speechSynthesis' in window)) return;
+    try {
+      if (!koVoice) pickVoice();
+      var u = new SpeechSynthesisUtterance(text);
+      u.lang = 'ko-KR';
+      if (koVoice) u.voice = koVoice;
+      u.rate = (typeof rate === 'number') ? rate : 0.95;
+      u.pitch = 1.08;   // 부드럽게
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+
+  // 영어 음성(부드러운 여성 우선) — 숫자·카운트다운·완료 안내에 사용
+  var enVoice = null;
+  function pickEnVoice() {
+    if (!('speechSynthesis' in window)) return;
+    var voices = window.speechSynthesis.getVoices() || [];
+    var en = voices.filter(function (v) { return /^en/i.test(v.lang); });
+    if (!en.length) { enVoice = null; return; }
+    en.sort(function (a, b) { return (/en-US/i.test(b.lang) ? 1 : 0) - (/en-US/i.test(a.lang) ? 1 : 0); });
+    var female = ['zira', 'aria', 'jenny', 'michelle', 'samantha', 'sonia', 'libby', 'natasha', 'clara', 'eva', 'female'];
+    var male = ['david', 'mark', 'guy', 'george', 'ryan', 'male'];
+    var pick = en.find(function (v) {
+      var n = v.name.toLowerCase();
+      return female.some(function (h) { return n.indexOf(h) >= 0; });
+    });
+    if (!pick) {
+      pick = en.find(function (v) {
+        var n = v.name.toLowerCase();
+        return !male.some(function (h) { return n.indexOf(h) >= 0; });
+      });
+    }
+    enVoice = pick || en[0];
+  }
+
+  function speakEn(text, rate) {
+    if (!voiceOnEl.checked) return;
+    if (nativeSay(text, 'en-US', (typeof rate === 'number') ? rate : 0.9, 1.0)) return;
+    if (!('speechSynthesis' in window)) return;
+    try {
+      if (!enVoice) pickEnVoice();
+      var u = new SpeechSynthesisUtterance(text);
+      u.lang = 'en-US';
+      if (enVoice) u.voice = enVoice;
+      u.rate = (typeof rate === 'number') ? rate : 0.9;
+      u.pitch = 1.0;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+
+  function updateUI() {
+    numEl.classList.remove('cd');
+    numEl.textContent = count;
+    curEl.textContent = count;
+    korEl.textContent = count > 0 ? korFor(count) : '준비';
+    prayerLineEl.textContent = (count > 0) ? prayerText() : '';
+    progEl.style.width = (count / TOTAL * 100) + '%';
+    numEl.classList.add('pulse');
+    setTimeout(function () { numEl.classList.remove('pulse'); }, 150);
+  }
+
+  function updateTimers() {
+    var elapsedCounts = count;
+    elapsedEl.textContent = fmt(elapsedCounts * (stepMs / 1000));
+    remainEl.textContent = fmt((TOTAL - count) * (stepMs / 1000));
+  }
+
+  function step() {
+    if (count >= TOTAL) { finish(); return; }
+    count++;
+    updateUI();
+    updateTimers();
+    playBell(false);
+    if (count >= TOTAL) {
+      speakEn(enFor(count), 0.95);   // 마지막 카운트(영어) 후 종료 시퀀스
+      finish();
+      return;
+    }
+    chantForCount(count);
+    nextAt = Date.now() + stepMs;
+    timer = setTimeout(step, stepMs);
+  }
+
+  function tick() {
+    if (running && nextAt) {
+      var remainStep = (nextAt - Date.now()) / 1000;
+      var doneSec = count * (stepMs / 1000) + (stepMs / 1000 - Math.max(0, remainStep));
+      elapsedEl.textContent = fmt(doneSec);
+      remainEl.textContent = fmt((TOTAL - count) * (stepMs / 1000) - (stepMs / 1000 - Math.max(0, remainStep)));
+    }
+  }
+
+  function finish() {
+    running = false;
+    clearTimeout(timer);
+    clearInterval(tickTimer);
+    doneMsgEl.textContent = '108배 완료 · 수고하셨습니다 🙏';
+    setTimeout(function () {
+      playBell(true);
+      speakEn('One hundred eight bows complete. Well done.');
+    }, 1600);
+    progEl.style.width = '100%';
+    remainEl.textContent = '00:00';
+    startBtn.disabled = true;
+    pauseBtn.disabled = true;
+    resetBtn.disabled = false;
+    releaseWake();
+  }
+
+  async function requestWake() {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', function () {});
+      }
+    } catch (e) {}
+  }
+  function releaseWake() {
+    try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (running && document.visibilityState === 'visible' && !wakeLock) requestWake();
+  });
+
+  function start() {
+    ensureAudio();
+    stepMs = Math.max(1, parseInt(intervalEl.value, 10) || 15) * 1000;
+    running = true;
+    startBtn.disabled = true;
+    pauseBtn.disabled = false;
+    resetBtn.disabled = false;
+    intervalEl.disabled = true;
+    prayerEl.disabled = true;
+    repeatEl.disabled = true;
+    requestWake();
+    clearInterval(tickTimer);
+    tickTimer = setInterval(tick, 250);
+    if (count === 0) {
+      doneMsgEl.textContent = '';
+      runCountdown();          // 5→0 카운트다운 후 1부터 시작
+    } else {
+      nextAt = Date.now() + stepMs;   // 이어하기
+      timer = setTimeout(step, stepMs);
+    }
+  }
+
+  // 시작 전 5,4,3,2,1,0 카운트다운(1초 간격) 후 본 카운팅 진입
+  var EN_NUM = ['zero', 'one', 'two', 'three', 'four', 'five'];
+  function runCountdown() {
+    nextAt = 0;
+    var c = 5;
+    korEl.textContent = 'Ready';
+    prayerLineEl.textContent = prayerText();
+    (function cd() {
+      if (!running) return;
+      numEl.classList.add('cd');
+      numEl.textContent = c;
+      numEl.classList.add('pulse');
+      setTimeout(function () { numEl.classList.remove('pulse'); }, 150);
+      if (c > 0) {
+        korEl.textContent = EN_NUM[c];
+        speakEn(EN_NUM[c]);          // 카운트다운은 영어 음성
+        c--;
+        timer = setTimeout(cd, 2000);   // 카운트다운 2초 간격
+      } else {
+        korEl.textContent = 'Start';
+        speakEn('start');
+        timer = setTimeout(function () {
+          if (!running) return;
+          step();              // 첫 절(일) 카운트
+        }, 2000);
+      }
+    })();
+  }
+
+  function pause() {
+    running = false;
+    clearTimeout(timer);
+    clearInterval(tickTimer);
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+    startBtn.disabled = false;
+    startBtn.textContent = '이어하기';
+    pauseBtn.disabled = true;
+    prayerEl.disabled = false;
+    repeatEl.disabled = false;
+    intervalEl.disabled = false;   // 일시정지 중 간격 변경 허용
+    releaseWake();
+  }
+
+  function reset() {
+    running = false;
+    clearTimeout(timer);
+    clearInterval(tickTimer);
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+    count = 0;
+    nextAt = 0;
+    updateUI();
+    numEl.classList.remove('cd');
+    numEl.textContent = '0';
+    korEl.textContent = '준비';
+    prayerLineEl.textContent = '';
+    doneMsgEl.textContent = '';
+    elapsedEl.textContent = '00:00';
+    stepMs = Math.max(1, parseInt(intervalEl.value, 10) || 15) * 1000;
+    remainEl.textContent = fmt(TOTAL * (stepMs / 1000));
+    progEl.style.width = '0%';
+    startBtn.disabled = false;
+    startBtn.textContent = '시작';
+    pauseBtn.disabled = true;
+    resetBtn.disabled = true;
+    intervalEl.disabled = false;
+    prayerEl.disabled = false;
+    repeatEl.disabled = false;
+    releaseWake();
+  }
+
+  startBtn.addEventListener('click', start);
+  pauseBtn.addEventListener('click', pause);
+  resetBtn.addEventListener('click', reset);
+  intervalEl.addEventListener('change', function () {
+    if (!running) {   // 시작 전 또는 일시정지 중 변경 즉시 반영
+      stepMs = Math.max(1, parseInt(intervalEl.value, 10) || 15) * 1000;
+      remainEl.textContent = fmt((TOTAL - count) * (stepMs / 1000));
+    }
+  });
+
+  // 종 높이/음량 — 값 표시 갱신 + 정지 상태에서 미리듣기
+  bellPitchEl.addEventListener('input', function () { bellPitchValEl.textContent = bellPitchEl.value; });
+  bellVolEl.addEventListener('input', function () { bellVolValEl.textContent = bellVolEl.value; });
+  bellPitchEl.addEventListener('change', function () { if (!running) playBell(false); });
+  bellVolEl.addEventListener('change', function () { if (!running) playBell(false); });
+
+  // 음성엔진 워밍업 + 여성 음성 선택(목록은 비동기 로드)
+  if ('speechSynthesis' in window) {
+    pickEnVoice();
+    pickVoice();
+    window.speechSynthesis.onvoiceschanged = function () { pickEnVoice(); pickVoice(); };
+  }
+
+  // 초기 남은시간 표시
+  remainEl.textContent = fmt(TOTAL * 15);
+})();
+</script>
+</body>
+</html>

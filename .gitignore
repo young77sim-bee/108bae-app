@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Capacitor 네이티브 프로젝트 (재생성: npx cap add android && npx cap sync)
+android/
+ios/
+
+# 아이콘/스플래시 생성물 (재생성: node make_icons.js)
+assets/
+
+# 빌드 산출물
+*.apk
+*.aab
+
+# 로그 / OS
+*.log
+.DS_Store
+Thumbs.db
