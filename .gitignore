@@ -7,6 +7,7 @@ ios/
 # 빌드 산출물 (android/ 내부는 android/.gitignore가 추가로 처리)
 *.apk
 *.aab
+!/dist/*.apk
 android/local.properties
 
 # 로그 / OS
