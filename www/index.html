@@ -151,6 +151,42 @@
     font-weight: 600;
   }
   .hint { color: var(--muted); font-size: 0.75rem; margin-top: 24px; opacity: 0.7; }
+
+  /* ===== 확장 기능: 배경음악 · 내 목소리 · 수행기록 ===== */
+  button.small { padding: 9px 18px; font-size: 0.85rem; }
+  .settings .grp-title { color: var(--accent); font-weight: 600; align-self: center; }
+  .muted-note { color: var(--muted); font-size: 0.8rem; min-width: 8em; text-align: left; }
+  #recBtn.recording { background: #c0392b; color: #fff; animation: recpulse 1s infinite; }
+  @keyframes recpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.62);
+    display: none; align-items: center; justify-content: center;
+    padding: 20px; z-index: 50;
+  }
+  .modal-bg.show { display: flex; }
+  .modal {
+    background: var(--bg2);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 16px; padding: 20px;
+    width: min(94vw, 460px); max-height: 84vh; overflow-y: auto;
+    text-align: left;
+  }
+  .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .modal-head strong { color: var(--accent); font-size: 1.15rem; letter-spacing: 0.04em; }
+  .stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .stat { flex: 1 1 28%; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 12px 6px; text-align: center; }
+  .stat .v { color: var(--accent2); font-size: 1.4rem; font-weight: 700; line-height: 1.1; }
+  .stat .l { color: var(--muted); font-size: 0.72rem; margin-top: 4px; }
+  .hist-list { display: flex; flex-direction: column; gap: 6px; }
+  .hist-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    background: rgba(255,255,255,0.04); border-radius: 8px; padding: 9px 12px; font-size: 0.85rem;
+  }
+  .hist-item .d { color: var(--text); line-height: 1.35; }
+  .hist-item .c { color: var(--accent2); font-weight: 600; white-space: nowrap; }
+  .hist-item .c.partial { color: var(--muted); font-weight: 400; }
+  .hist-empty { color: var(--muted); text-align: center; padding: 24px 0; }
 </style>
 </head>
 <body>
@@ -171,11 +207,13 @@
     <button id="startBtn">시작</button>
     <button id="pauseBtn" class="ghost" disabled>일시정지</button>
     <button id="resetBtn" class="ghost" disabled>다시시작</button>
+    <button id="historyBtn" class="ghost">기록</button>
   </div>
 
   <div class="settings">
     <label>기도문구
-      <input type="text" id="prayer" placeholder="예) 관세음보살" maxlength="40" style="width:160px;text-align:left;">
+      <input type="text" id="prayer" list="prayerList" placeholder="예) 관세음보살" maxlength="40" style="width:160px;text-align:left;">
+      <datalist id="prayerList"></datalist>
     </label>
     <label>반복
       <input type="number" id="repeat" value="1" min="1" max="12" step="1"> 회
@@ -201,7 +239,45 @@
     </label>
   </div>
 
+  <div class="settings">
+    <label>배경음악
+      <select id="bgmSel">
+        <option value="">없음</option>
+        <option value="bgm:med1">명상음악</option>
+        <option value="bgm:banya">반야심경</option>
+      </select>
+    </label>
+    <button id="bgmAdd" class="ghost small" type="button">+ 내 음악 추가</button>
+    <button id="bgmDel" class="ghost small" type="button" style="display:none;">선택곡 삭제</button>
+    <input type="file" id="bgmFile" accept="audio/*" style="display:none;">
+    <label>음악 음량
+      <input type="range" id="bgmVol" min="0" max="100" value="40" step="5" style="width:100px;vertical-align:middle;">
+      <span id="bgmVolVal">40</span>%
+    </label>
+  </div>
+
+  <div class="settings">
+    <span class="grp-title">기도 음성 (내 목소리)</span>
+    <button id="recBtn" class="ghost small" type="button">● 녹음</button>
+    <button id="recPlay" class="ghost small" type="button" disabled>들어보기</button>
+    <button id="recDel" class="ghost small" type="button" style="display:none;">삭제</button>
+    <label><input type="checkbox" id="useMyVoice" disabled> 내 목소리로 기도</label>
+    <span id="recStatus" class="muted-note"></span>
+  </div>
+
   <div class="hint">화면 자동 꺼짐 방지 작동 중 · 음성이 안 나오면 한 번 더 [시작]을 눌러주세요</div>
+
+  <div class="modal-bg" id="historyModal">
+    <div class="modal">
+      <div class="modal-head">
+        <strong>🙏 수행 기록</strong>
+        <button id="histClose" class="ghost small" type="button">닫기</button>
+      </div>
+      <div class="stats" id="histStats"></div>
+      <div class="hist-list" id="histList"></div>
+      <button id="histClear" class="ghost small" type="button" style="margin-top:14px;">전체 기록 삭제</button>
+    </div>
+  </div>
 
 <script>
 (function () {
@@ -291,16 +367,17 @@
     setTimeout(function () { if (running) speakEn(enFor(n), 0.95); }, 350);
 
     var p = prayerText();
-    if (!p) return;
+    var useVoice = myVoiceActive();
+    if (!p && !useVoice) return;
 
-    var slots = Math.max(1, Math.min(12, parseInt(repeatEl.value, 10) || 1));  // 절 1회당 기도 문구 반복 횟수
+    var slots = Math.max(1, Math.min(12, parseInt(repeatEl.value, 10) || 1));  // 절 1회당 기도 반복 횟수
     var startOffset = 1700;        // 숫자 발화가 끝난 뒤 시작
     var endMargin = 2500;          // 다음 종소리 전 여유
     var span = Math.max(0, stepMs - startOffset - endMargin);
     for (var i = 0; i < slots; i++) {
       var t = startOffset + (slots > 1 ? (span * i / (slots - 1)) : 0);
       (function (delay) {
-        setTimeout(function () { if (running) speakKo(p, 0.65); }, delay);  // 기도 문구는 한국어 음성, 느리게
+        setTimeout(function () { if (running) sayPrayer(p, 0.65); }, delay);  // 내 목소리 녹음 또는 한국어 TTS
       })(t);
     }
   }
@@ -513,6 +590,8 @@
 
   function finish() {
     running = false;
+    recordSession(true);    // 완료 기록 저장
+    // 108배 완료 후에도 배경음악은 계속 반복 (다시시작/앱 종료 시 정지)
     clearTimeout(timer);
     clearInterval(tickTimer);
     doneMsgEl.textContent = '108배 완료 · 수고하셨습니다 🙏';
@@ -547,6 +626,8 @@
     ensureAudio();
     stepMs = Math.max(1, parseInt(intervalEl.value, 10) || 15) * 1000;
     running = true;
+    if (count === 0) { sessionStart = Date.now(); sessionSaved = false; rememberPrayer(prayerText()); }
+    if (!bgmIsPlaying()) startBgm();   // 이어하기 시 이미 재생 중이면 끊지 않고 계속
     startBtn.disabled = true;
     pauseBtn.disabled = false;
     resetBtn.disabled = false;
@@ -596,6 +677,7 @@
 
   function pause() {
     running = false;
+    // 배경음악은 끊지 않고 계속 반복 (다시시작 시 정지)
     clearTimeout(timer);
     clearInterval(tickTimer);
     try { window.speechSynthesis.cancel(); } catch (e) {}
@@ -610,6 +692,8 @@
 
   function reset() {
     running = false;
+    recordSession(false);   // 중단된 절 수도 기록에 남김
+    stopBgm();
     clearTimeout(timer);
     clearInterval(tickTimer);
     try { window.speechSynthesis.cancel(); } catch (e) {}
@@ -660,6 +744,552 @@
 
   // 초기 남은시간 표시
   remainEl.textContent = fmt(TOTAL * 15);
+
+  /* =========================================================
+     확장 기능: 배경음악 · 내 목소리 기도 · 수행 기록
+     ========================================================= */
+
+  // --- 새 DOM 요소 ---
+  var bgmSelEl    = document.getElementById('bgmSel');
+  var bgmAddEl    = document.getElementById('bgmAdd');
+  var bgmDelEl    = document.getElementById('bgmDel');
+  var bgmFileEl   = document.getElementById('bgmFile');
+  var bgmVolEl    = document.getElementById('bgmVol');
+  var bgmVolValEl = document.getElementById('bgmVolVal');
+  var recBtnEl    = document.getElementById('recBtn');
+  var recPlayEl   = document.getElementById('recPlay');
+  var recDelEl    = document.getElementById('recDel');
+  var useMyVoiceEl = document.getElementById('useMyVoice');
+  var recStatusEl = document.getElementById('recStatus');
+  var historyBtnEl = document.getElementById('historyBtn');
+  var historyModalEl = document.getElementById('historyModal');
+  var histCloseEl = document.getElementById('histClose');
+  var histClearEl = document.getElementById('histClear');
+  var histStatsEl = document.getElementById('histStats');
+  var histListEl  = document.getElementById('histList');
+  var prayerListEl = document.getElementById('prayerList');
+
+  // --- 상태 ---
+  var sessionStart = 0, sessionSaved = false;
+  var bgmAudio = null, bgmUrl = null, bgmTimer = null, bgmGain = null, bgmStopFn = null;
+  var wantBgm = false, bgmPreviewTimer = null;
+  var haveVoice = false, myVoiceAudio = null, myVoiceUrl = null;
+  var mediaRec = null, recChunks = [], recStream = null;
+  var pendingBgm = '', pendingUseMyVoice = false;
+
+  // ---------- IndexedDB (오디오 Blob 저장) ----------
+  var DB_NAME = 'bae108', DB_VER = 1, STORE = 'audio';
+  function idbOpen() {
+    return new Promise(function (resolve, reject) {
+      if (!window.indexedDB) { reject(new Error('no-idb')); return; }
+      var req = indexedDB.open(DB_NAME, DB_VER);
+      req.onupgradeneeded = function () {
+        var db = req.result;
+        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'id' });
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+  function idbPut(rec) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(STORE, 'readwrite');
+        tx.objectStore(STORE).put(rec);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+  function idbGet(id) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(STORE, 'readonly');
+        var r = tx.objectStore(STORE).get(id);
+        r.onsuccess = function () { resolve(r.result || null); };
+        r.onerror = function () { reject(r.error); };
+      });
+    });
+  }
+  function idbDel(id) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(STORE, 'readwrite');
+        tx.objectStore(STORE).delete(id);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+  function idbAll() {
+    return idbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(STORE, 'readonly');
+        var r = tx.objectStore(STORE).getAll();
+        r.onsuccess = function () { resolve(r.result || []); };
+        r.onerror = function () { reject(r.error); };
+      });
+    });
+  }
+
+  // ---------- 설정 저장/복원 ----------
+  var LS_SET = 'bae108_settings';
+  function saveSettings() {
+    try {
+      localStorage.setItem(LS_SET, JSON.stringify({
+        prayer: prayerEl.value, repeat: repeatEl.value, interval: intervalEl.value,
+        readMode: readModeEl.value, voiceOn: voiceOnEl.checked, bellOn: bellOnEl.checked,
+        bellPitch: bellPitchEl.value, bellVol: bellVolEl.value,
+        bgm: bgmSelEl.value, bgmVol: bgmVolEl.value, useMyVoice: useMyVoiceEl.checked
+      }));
+    } catch (e) {}
+  }
+  function restoreSettings() {
+    var s; try { s = JSON.parse(localStorage.getItem(LS_SET) || 'null'); } catch (e) { s = null; }
+    if (!s) return;
+    if (s.prayer != null) prayerEl.value = s.prayer;
+    if (s.repeat != null) repeatEl.value = s.repeat;
+    if (s.interval != null) intervalEl.value = s.interval;
+    if (s.readMode != null) readModeEl.value = s.readMode;
+    if (s.voiceOn != null) voiceOnEl.checked = !!s.voiceOn;
+    if (s.bellOn != null) bellOnEl.checked = !!s.bellOn;
+    if (s.bellPitch != null) { bellPitchEl.value = s.bellPitch; bellPitchValEl.textContent = s.bellPitch; }
+    if (s.bellVol != null) { bellVolEl.value = s.bellVol; bellVolValEl.textContent = s.bellVol; }
+    if (s.bgmVol != null) { bgmVolEl.value = s.bgmVol; bgmVolValEl.textContent = s.bgmVol; }
+    pendingBgm = s.bgm || '';
+    pendingUseMyVoice = !!s.useMyVoice;
+    stepMs = Math.max(1, parseInt(intervalEl.value, 10) || 15) * 1000;
+    remainEl.textContent = fmt(TOTAL * (stepMs / 1000));
+  }
+
+  // ---------- 배경음악 ----------
+  function bgmVolFrac() { return (parseInt(bgmVolEl.value, 10) || 0) / 100; }
+  function bgmIsPlaying() { return wantBgm || !!(bgmAudio || bgmTimer || bgmGain); }
+
+  // 앱에 내장된 음원 (www/bgm/)
+  var BGM_FILES = { 'bgm:med1': 'bgm/med1.mp3', 'bgm:banya': 'bgm/banya.mp3' };
+  function startBundled(path) {
+    if (!path) return;
+    try {
+      bgmAudio = new Audio(path);
+      bgmAudio.loop = true;                 // 앱 끝날 때까지 계속 반복
+      bgmAudio.volume = bgmVolFrac();
+      bgmAudio.play().catch(function () {});
+    } catch (e) {}
+  }
+
+  function stopBgm() {
+    wantBgm = false;
+    if (bgmAudio) { try { bgmAudio.pause(); } catch (e) {} bgmAudio = null; }
+    if (bgmUrl) { try { URL.revokeObjectURL(bgmUrl); } catch (e) {} bgmUrl = null; }
+    if (bgmTimer) { clearInterval(bgmTimer); bgmTimer = null; }
+    if (bgmStopFn) { try { bgmStopFn(); } catch (e) {} bgmStopFn = null; }
+  }
+
+  function startBgm() {
+    stopBgm();
+    var sel = bgmSelEl.value;
+    if (!sel) return;
+    wantBgm = true;
+    if (sel.indexOf('bgm:') === 0) { startBundled(BGM_FILES[sel]); return; }
+    ensureAudio();
+    // 사용자 업로드 음악 (id 'u:...')
+    idbGet(sel).then(function (rec) {
+      if (!wantBgm || !rec || !rec.blob || bgmSelEl.value !== sel) return;
+      try {
+        bgmUrl = URL.createObjectURL(rec.blob);
+        bgmAudio = new Audio(bgmUrl);
+        bgmAudio.loop = true;
+        bgmAudio.volume = bgmVolFrac();
+        bgmAudio.play().catch(function () {});
+      } catch (e) {}
+    }).catch(function () {});
+  }
+
+  function setBgmVolume() {
+    var v = bgmVolFrac();
+    if (bgmAudio) bgmAudio.volume = v;
+    if (bgmGain && audioCtx) { try { bgmGain.gain.value = v * 0.5; } catch (e) {} }
+  }
+
+  // 죽비/목탁풍 — 짧은 나무 두드림을 일정 간격으로 반복
+  function woodKnock() {
+    if (!audioCtx) return;
+    var v = bgmVolFrac(); if (v <= 0) return;
+    var now = audioCtx.currentTime;
+    var dur = 0.06;
+    var buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * dur), audioCtx.sampleRate);
+    var data = buf.getChannelData(0);
+    for (var i = 0; i < data.length; i++) {
+      var env = Math.pow(1 - i / data.length, 2);
+      data[i] = (Math.random() * 2 - 1) * env;
+    }
+    var src = audioCtx.createBufferSource(); src.buffer = buf;
+    var bp = audioCtx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2000; bp.Q.value = 1.4;
+    var g = audioCtx.createGain(); g.gain.value = v * 0.9;
+    src.connect(bp); bp.connect(g); g.connect(audioCtx.destination);
+    src.start(now); src.stop(now + dur);
+    var osc = audioCtx.createOscillator(); var og = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(900, now);
+    osc.frequency.exponentialRampToValueAtTime(320, now + 0.05);
+    og.gain.setValueAtTime(v * 0.5, now);
+    og.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+    osc.connect(og); og.connect(audioCtx.destination);
+    osc.start(now); osc.stop(now + 0.1);
+  }
+  function startJukbi() {
+    woodKnock();
+    bgmTimer = setInterval(function () { if (wantBgm) woodKnock(); }, 2000);
+  }
+
+  // 명상 — 싱잉볼풍 지속음 + 느린 호흡 LFO
+  function startMeditation() {
+    if (!audioCtx) return;
+    var now = audioCtx.currentTime;
+    bgmGain = audioCtx.createGain();
+    bgmGain.gain.value = bgmVolFrac() * 0.5;
+    bgmGain.connect(audioCtx.destination);
+    var base = 174;
+    var partials = [1, 2.0, 2.76, 3.0];
+    var gains = [0.6, 0.25, 0.12, 0.15];
+    var nodes = [];
+    partials.forEach(function (m, idx) {
+      var o = audioCtx.createOscillator(); var g = audioCtx.createGain();
+      o.type = 'sine'; o.frequency.value = base * m;
+      g.gain.value = gains[idx];
+      o.connect(g); g.connect(bgmGain);
+      o.start(now); nodes.push(o); nodes.push(g);
+    });
+    var lfo = audioCtx.createOscillator(); var lfoGain = audioCtx.createGain();
+    lfo.frequency.value = 0.07;
+    lfoGain.gain.value = bgmVolFrac() * 0.5 * 0.4;
+    lfo.connect(lfoGain); lfoGain.connect(bgmGain.gain);
+    lfo.start(now);
+    bgmStopFn = function () {
+      var t = audioCtx ? audioCtx.currentTime : 0;
+      try {
+        bgmGain.gain.cancelScheduledValues(t);
+        bgmGain.gain.setValueAtTime(Math.max(0.0001, bgmGain.gain.value), t);
+        bgmGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+      } catch (e) {}
+      setTimeout(function () {
+        nodes.forEach(function (n) { try { if (n.stop) n.stop(); } catch (e) {} try { n.disconnect(); } catch (e) {} });
+        try { lfo.stop(); } catch (e) {}
+        try { lfoGain.disconnect(); } catch (e) {}
+        try { bgmGain.disconnect(); } catch (e) {}
+        bgmGain = null;
+      }, 900);
+    };
+  }
+
+  // 카페 — 재즈풍(Rhodes 코드 + 베이스 + 셰이커) 잔잔한 루프, 저작권 없는 합성음
+  function startCafe() {
+    if (!audioCtx) return;
+    bgmGain = audioCtx.createGain();
+    bgmGain.gain.value = bgmVolFrac() * 0.5;
+    var lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2200;
+    var delay = audioCtx.createDelay(1.0); delay.delayTime.value = 0.28;
+    var fb = audioCtx.createGain(); fb.gain.value = 0.22;
+    var wet = audioCtx.createGain(); wet.gain.value = 0.22;
+    bgmGain.connect(lp); lp.connect(audioCtx.destination);
+    lp.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(wet); wet.connect(audioCtx.destination);
+
+    var A = 220; // A3
+    function nf(semi) { return A * Math.pow(2, semi / 12); }
+    // Dm7 → G7 → Cmaj7 → Am7 (잔잔한 재즈 진행)
+    var chords = [[5, 8, 12, 15], [-2, 2, 5, 9], [3, 7, 10, 14], [0, 3, 7, 10]];
+    var bass = [-7, -14, -9, -12];
+    var idx = 0;
+    var BAR = 4.0;
+
+    function voice(semi, t, dur, gain) {
+      var o1 = audioCtx.createOscillator(), o2 = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o1.type = 'sine'; o2.type = 'triangle'; o2.detune.value = 5;
+      o1.frequency.value = nf(semi); o2.frequency.value = nf(semi);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(gain, t + 0.25);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o1.connect(g); o2.connect(g); g.connect(bgmGain);
+      o1.start(t); o2.start(t); o1.stop(t + dur + 0.05); o2.stop(t + dur + 0.05);
+    }
+    function shaker(t) {
+      var dur = 0.05;
+      var buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * dur), audioCtx.sampleRate);
+      var d = buf.getChannelData(0);
+      for (var i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 1.5);
+      var s = audioCtx.createBufferSource(); s.buffer = buf;
+      var hp = audioCtx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 6000;
+      var g = audioCtx.createGain(); g.gain.value = 0.05;
+      s.connect(hp); hp.connect(g); g.connect(bgmGain);
+      s.start(t); s.stop(t + dur);
+    }
+    function playBar() {
+      if (!wantBgm || !audioCtx || !bgmGain) return;
+      var t = audioCtx.currentTime + 0.05;
+      var ch = chords[idx % chords.length];
+      ch.forEach(function (s) { voice(s, t, BAR * 0.95, 0.11); });
+      voice(bass[idx % bass.length], t, BAR * 0.95, 0.16);
+      for (var b = 0; b < 4; b++) shaker(t + b * (BAR / 4));
+      idx++;
+    }
+    playBar();
+    bgmTimer = setInterval(playBar, BAR * 1000);
+    bgmStopFn = function () {
+      var t = audioCtx ? audioCtx.currentTime : 0;
+      try {
+        bgmGain.gain.cancelScheduledValues(t);
+        bgmGain.gain.setValueAtTime(Math.max(0.0001, bgmGain.gain.value), t);
+        bgmGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+      } catch (e) {}
+      setTimeout(function () {
+        try { bgmGain.disconnect(); } catch (e) {}
+        try { lp.disconnect(); delay.disconnect(); fb.disconnect(); wet.disconnect(); } catch (e) {}
+        bgmGain = null;
+      }, 700);
+    };
+  }
+
+  function onBgmChange() {
+    bgmDelEl.style.display = (bgmSelEl.value.indexOf('u:') === 0) ? '' : 'none';
+    saveSettings();
+    if (running) { startBgm(); return; }
+    // 정지 상태에서는 5초 미리듣기
+    clearTimeout(bgmPreviewTimer);
+    stopBgm();
+    if (!bgmSelEl.value) return;
+    startBgm();
+    bgmPreviewTimer = setTimeout(function () { if (!running) stopBgm(); }, 5000);
+  }
+
+  function addBgmOption(id, name, select) {
+    var opt = document.createElement('option');
+    opt.value = id; opt.textContent = '♪ ' + name;
+    bgmSelEl.appendChild(opt);
+    if (select) { bgmSelEl.value = id; onBgmChange(); }
+  }
+  function addMusicFile(file) {
+    if (!file) return;
+    var id = 'u:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    var name = (file.name || '음악').replace(/\.[^.]+$/, '').slice(0, 24);
+    idbPut({ id: id, name: name, type: file.type, blob: file }).then(function () {
+      addBgmOption(id, name, true);
+    }).catch(function () { alert('음악 저장에 실패했습니다.'); });
+  }
+  function deleteSelectedTrack() {
+    var sel = bgmSelEl.value;
+    if (sel.indexOf('u:') !== 0) return;
+    idbDel(sel).then(function () {
+      var opt = bgmSelEl.querySelector('option[value="' + sel + '"]');
+      if (opt) opt.parentNode.removeChild(opt);
+      bgmSelEl.value = '';
+      onBgmChange();
+    });
+  }
+  function loadMusicTracks() {
+    idbAll().then(function (recs) {
+      recs.forEach(function (r) {
+        if (r.id && r.id.indexOf('u:') === 0) addBgmOption(r.id, r.name || '음악', false);
+      });
+      // 옵션 생성 후 저장된 선택 복원
+      if (pendingBgm && bgmSelEl.querySelector('option[value="' + pendingBgm + '"]')) {
+        bgmSelEl.value = pendingBgm;
+      }
+      bgmDelEl.style.display = (bgmSelEl.value.indexOf('u:') === 0) ? '' : 'none';
+    }).catch(function () {});
+  }
+
+  // ---------- 내 목소리 기도 ----------
+  var VOICE_ID = 'myvoice';
+  function myVoiceActive() { return useMyVoiceEl.checked && haveVoice; }
+
+  function sayPrayer(text, rate) {
+    if (myVoiceActive()) { playMyVoice(); return; }
+    if (text) speakKo(text, rate);
+  }
+
+  function invalidateMyVoice() {
+    myVoiceAudio = null;
+    if (myVoiceUrl) { try { URL.revokeObjectURL(myVoiceUrl); } catch (e) {} myVoiceUrl = null; }
+  }
+  function playMyVoice() {
+    if (myVoiceAudio) { try { myVoiceAudio.currentTime = 0; myVoiceAudio.play().catch(function () {}); } catch (e) {} return; }
+    idbGet(VOICE_ID).then(function (rec) {
+      if (!rec || !rec.blob) return;
+      try {
+        myVoiceUrl = URL.createObjectURL(rec.blob);
+        myVoiceAudio = new Audio(myVoiceUrl);
+        myVoiceAudio.play().catch(function () {});
+      } catch (e) {}
+    });
+  }
+
+  function refreshVoiceUI() {
+    recPlayEl.disabled = !haveVoice;
+    recDelEl.style.display = haveVoice ? '' : 'none';
+    useMyVoiceEl.disabled = !haveVoice;
+    if (!haveVoice && useMyVoiceEl.checked) useMyVoiceEl.checked = false;
+  }
+  function loadMyVoice() {
+    idbGet(VOICE_ID).then(function (rec) {
+      haveVoice = !!(rec && rec.blob);
+      if (haveVoice) recStatusEl.textContent = '녹음됨 ✓';
+      if (pendingUseMyVoice && haveVoice) useMyVoiceEl.checked = true;
+      refreshVoiceUI();
+    }).catch(function () { refreshVoiceUI(); });
+  }
+
+  function toggleRecord() {
+    if (mediaRec && mediaRec.state === 'recording') { try { mediaRec.stop(); } catch (e) {} return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+      recStatusEl.textContent = '이 기기는 녹음을 지원하지 않습니다';
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      recStream = stream; recChunks = [];
+      var mime = '';
+      ['audio/webm', 'audio/mp4', 'audio/ogg'].some(function (m) {
+        if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) { mime = m; return true; }
+        return false;
+      });
+      try { mediaRec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream); }
+      catch (e) { mediaRec = new MediaRecorder(stream); }
+      mediaRec.ondataavailable = function (e) { if (e.data && e.data.size) recChunks.push(e.data); };
+      mediaRec.onstop = function () {
+        var blob = new Blob(recChunks, { type: (mediaRec && mediaRec.mimeType) || 'audio/webm' });
+        if (recStream) { recStream.getTracks().forEach(function (t) { t.stop(); }); recStream = null; }
+        recBtnEl.classList.remove('recording'); recBtnEl.textContent = '● 녹음';
+        if (!blob.size) { recStatusEl.textContent = '녹음 실패 (다시 시도)'; return; }
+        idbPut({ id: VOICE_ID, name: '내 목소리', type: blob.type, blob: blob }).then(function () {
+          haveVoice = true; invalidateMyVoice();
+          useMyVoiceEl.checked = true;
+          recStatusEl.textContent = '녹음됨 ✓ (' + Math.round(blob.size / 1024) + 'KB)';
+          refreshVoiceUI(); saveSettings();
+        }).catch(function () { recStatusEl.textContent = '저장 실패'; });
+      };
+      mediaRec.start();
+      recBtnEl.classList.add('recording'); recBtnEl.textContent = '■ 중지';
+      recStatusEl.textContent = '녹음 중… 기도문을 말하세요';
+    }).catch(function () {
+      recStatusEl.textContent = '마이크 권한이 필요합니다';
+    });
+  }
+  function deleteMyVoice() {
+    idbDel(VOICE_ID).then(function () {
+      haveVoice = false; invalidateMyVoice();
+      recStatusEl.textContent = '';
+      refreshVoiceUI(); saveSettings();
+    });
+  }
+
+  // ---------- 수행 기록 ----------
+  var LS_HIST = 'bae108_history';
+  function loadHist() { try { return JSON.parse(localStorage.getItem(LS_HIST) || '[]'); } catch (e) { return []; } }
+  function saveHist(arr) { try { localStorage.setItem(LS_HIST, JSON.stringify(arr)); } catch (e) {} }
+
+  function recordSession(complete) {
+    if (count <= 0 || sessionSaved) return;
+    var arr = loadHist();
+    arr.push({
+      ts: Date.now(),
+      count: count,
+      total: TOTAL,
+      complete: !!complete,
+      sec: sessionStart ? Math.round((Date.now() - sessionStart) / 1000) : Math.round(count * (stepMs / 1000)),
+      prayer: prayerText()
+    });
+    if (arr.length > 1000) arr = arr.slice(-1000);
+    saveHist(arr);
+    sessionSaved = true;
+  }
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function fmtDate(ts) {
+    var d = new Date(ts);
+    return d.getFullYear() + '.' + pad2(d.getMonth() + 1) + '.' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  }
+  function fmtDur(sec) {
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return m + '분' + (s ? (' ' + s + '초') : '');
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function renderHistory() {
+    var arr = loadHist();
+    var totalBows = arr.reduce(function (a, b) { return a + (b.count || 0); }, 0);
+    var now = new Date();
+    var monthCount = arr.filter(function (r) {
+      var d = new Date(r.ts);
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    }).length;
+    histStatsEl.innerHTML =
+      '<div class="stat"><div class="v">' + arr.length + '</div><div class="l">총 수행</div></div>' +
+      '<div class="stat"><div class="v">' + totalBows.toLocaleString() + '</div><div class="l">총 절수</div></div>' +
+      '<div class="stat"><div class="v">' + monthCount + '</div><div class="l">이번 달</div></div>';
+    if (!arr.length) { histListEl.innerHTML = '<div class="hist-empty">아직 기록이 없습니다</div>'; return; }
+    var html = '';
+    arr.slice().reverse().forEach(function (r) {
+      var label = (r.count || 0) + '배';
+      var tag = r.complete
+        ? '<span class="c">' + label + ' ✓</span>'
+        : '<span class="c partial">' + label + ' (중단)</span>';
+      var pr = r.prayer ? ' · ' + escapeHtml(r.prayer) : '';
+      html += '<div class="hist-item"><span class="d">' + fmtDate(r.ts) +
+              '<br><span style="color:var(--muted);font-size:0.75rem;">' + fmtDur(r.sec || 0) + pr + '</span></span>' +
+              tag + '</div>';
+    });
+    histListEl.innerHTML = html;
+  }
+
+  // ---------- 기도문구 최근 목록(저장·선택) ----------
+  var LS_PRAYERS = 'bae108_prayers';
+  function loadPrayers() { try { return JSON.parse(localStorage.getItem(LS_PRAYERS) || '[]'); } catch (e) { return []; } }
+  function renderPrayerList() {
+    var arr = loadPrayers();
+    prayerListEl.innerHTML = arr.map(function (p) { return '<option value="' + escapeHtml(p) + '"></option>'; }).join('');
+  }
+  function rememberPrayer(text) {
+    text = (text || '').trim();
+    if (!text) return;
+    var arr = loadPrayers().filter(function (p) { return p !== text; });
+    arr.unshift(text);
+    if (arr.length > 12) arr = arr.slice(0, 12);
+    try { localStorage.setItem(LS_PRAYERS, JSON.stringify(arr)); } catch (e) {}
+    renderPrayerList();
+  }
+
+  // ---------- 이벤트 연결 ----------
+  bgmVolEl.addEventListener('input', function () { bgmVolValEl.textContent = bgmVolEl.value; setBgmVolume(); });
+  bgmVolEl.addEventListener('change', saveSettings);
+  bgmSelEl.addEventListener('change', onBgmChange);
+  bgmAddEl.addEventListener('click', function () { bgmFileEl.click(); });
+  bgmFileEl.addEventListener('change', function () { if (bgmFileEl.files && bgmFileEl.files[0]) addMusicFile(bgmFileEl.files[0]); bgmFileEl.value = ''; });
+  bgmDelEl.addEventListener('click', function () { if (confirm('선택한 음악을 삭제할까요?')) deleteSelectedTrack(); });
+
+  recBtnEl.addEventListener('click', toggleRecord);
+  recPlayEl.addEventListener('click', playMyVoice);
+  recDelEl.addEventListener('click', function () { if (confirm('녹음한 목소리를 삭제할까요?')) deleteMyVoice(); });
+  useMyVoiceEl.addEventListener('change', saveSettings);
+
+  historyBtnEl.addEventListener('click', function () { renderHistory(); historyModalEl.classList.add('show'); });
+  histCloseEl.addEventListener('click', function () { historyModalEl.classList.remove('show'); });
+  historyModalEl.addEventListener('click', function (e) { if (e.target === historyModalEl) historyModalEl.classList.remove('show'); });
+  histClearEl.addEventListener('click', function () { if (confirm('모든 수행 기록을 삭제할까요?')) { saveHist([]); renderHistory(); } });
+
+  // 기존 설정도 변경 시 저장
+  [prayerEl, repeatEl, intervalEl, readModeEl, voiceOnEl, bellOnEl, bellPitchEl, bellVolEl].forEach(function (el) {
+    el.addEventListener('change', saveSettings);
+  });
+  prayerEl.addEventListener('change', function () { rememberPrayer(prayerEl.value); });
+
+  // ---------- 초기화 ----------
+  restoreSettings();
+  renderPrayerList();
+  loadMusicTracks();
+  loadMyVoice();
 })();
 </script>
 </body>
